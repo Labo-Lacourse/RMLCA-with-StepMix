@@ -1,4 +1,4 @@
-#### Introduction to StepMix: an analysis of latent classes applied to repeated measurements
+#### Introduction to StepMix: A latent class analysis applied to repeated measures
 ---
 
 
