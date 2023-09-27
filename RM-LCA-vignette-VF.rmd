@@ -1,0 +1,770 @@
+---
+title: "Introduction à StepMix : une analyse de classes latentes appliquée à des mesures répétées"
+author:
+  - name: "Félix Laliberté"
+    affiliation: Université de Montréal
+  - name: "Clémentine Courdi"
+    affiliation: Université de Montréal
+  - name: "Éric Lacourse"
+    affiliation: Université de Montréal
+    
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    latex_engine: xelatex
+---
+
+<br>
+
+Les données ainsi que le code permettant de reproduire les analyses présentées dans cette vignette sont disponibles aux liens suivants :
+
+* Données : https://github.com/clementine-courdi/analyse-sequence-transition-ecole-travail/tree/main
+
+* Code : https://github.com/Labo-Lacourse/RMLCA-with-StepMix
+
+<hr>
+
+### Mise en contexte
+
+L'analyse de classes latentes à mesures répétées (ACL-MR) fait partie de la famille des modèles de mélange (*mixture model*; Collins et Lanza, 2010; Killian et al., 2019; McLachlan et Peel, 2000). Ces analyses utilisent une approche probabiliste pour capter l'hétérogénéité non directement observée au sein des populations, plutôt qu'une approche algorithmique et heuristique. Les ACL-MR se distinguent par leur utilisation de variables observées catégorielles pour générer des classes latentes (sous-groupes d'individus) qui, elles, sont aussi reconnues comme catégorielles (Lanza, 2016). Sur le plan de la méthode, la procédure utilisée pour réaliser des ACL-MR se base sur les paramètres de distribution et de covariations des variables observées à l'étude pour tester quelle solution (nombre de classes) convient le mieux aux données (Hagenaars et McCutcheon, 2002; Lanza et al., 2012). L'hypothèse centrale est que les relations entre les variables s'expliquent par la présence d'une variable latente (la composition des classes) non mesurée, que l'on tente d'estimer. Cette estimation se fait par un processus de calculs itératifs, dont le but est d'optimiser une fonction de vraisemblance (maximum likelihood function) afin que les données se répartissent en fonction d'une classification a priori inconnue. Les calculs s'amorcent en assumant que la variable latente catégorielle (l'appartenance aux classes) est manquante pour tous les sujets de l'échantillon, suivis d'estimations répétées des valeurs potentielles (valeurs de départ) des participants et de leur probabilité d'appartenir à chacune des classes (pour une définition plus approfondie voir Asparouhov et Muthén, 2019 et Nylund-Gibson et Choi, 2018).
+
+Une fois la variable latente modélisée, elle peut ensuite être enregistrée pour réaliser de nouvelles analyses. Notamment, les classes latentes estimées peuvent servir à prédire une variable dépendante dite « distale » (*distal outcome*) ou être encore être utilisées comme variable connue pouvant être prédite par des variables indépendantes (prédicteurs/covariables). Dans ce type de modélisation, le modèle de mélange est nommé « modèle de mesure » (*measurement model*) et la relation entre le modèle de mesure (c.-à-d. la variable latente) et les variables externes au modèle de mesure est désignée comme étant le « modèle structurel » (*structural model*). Comme le modèle structurel traite les classes latentes comme une variable connue, qui peut prendre le rôle de variable dépendante ou indépendante selon les objectifs, on utilise des modèles connus de la famille des modèles linéaires généralisés pour les estimer (ANOVA, régression logistique multinomiale, etc.).
+
+
+#### StepMix
+
+StepMix est une nouvelle librairie disponible dans les langages R (Cran) et Python (PyPI) qui permet de modéliser les modèles de mélange (avec ou sans variables externes) sous une interface à la fois modulable et facile d'utilisation. Bien que StepMix soit toujours en développement, la librairie permet présentement de modéliser de nombreux modèles de mélange en fonction de la distribution des variables observées (p. ex., catégorielles, normales, mixtes). Une deuxième spécificité majeure de StepMix est que la librairie permet de modéliser des modèles structurels en utilisant différentes « approches par étapes » (*stepwise approaches*).
+
+L'objectif de cette vignette est d'introduire StepMix en comparant les résultats d'une ACL-MR réalisée avec StepMix et ceux obtenus avec la populaire librairie poLCA. Nous présenterons aussi par le biais d'un modèle structurel certaines des approches par étapes « à biais ajusté » offertes par StepMix.
+
+
+#### Données
+
+Les analyses présentées reposent sur les données tirées d'un projet de recherche portant sur la transition de l'école au travail auprès de jeunes en situation de vulnérabilité (Dupéré et al., 2018; Thouin, 2022). L'ACL-MR est construite à partir de 16 variables observées mesurant chacune le statut d'occupation de 386 jeunes à un temps de mesure différent : 1) ni au travail ni en éducation (N), 2) au travail (T), 3) en éducation secondaire (ES) et 4) en éducation postsecondaire (EP). L'ACL-MR permettra ainsi de cerner différents parcours de transition de l'école au travail via une approche inductive. Une variable binaire mesurant l'appartenance à un groupe minoritaire (0=Non, 1=Oui) sera ensuite utilisée comme prédicteur. Nous comparerons les résultats du modèle structurel obtenus avec poLCA et ceux obtenus avec les différentes méthodes plus robustes de StepMix.
+
+<br>
+
+### ACL-MR SIMPLE
+
+La décision du nombre de classes à retenir en ACL-MR doit à la fois tenir compte d'indices d'ajustement et de la théorie sur les concepts à l'étude. Le Tableau 1 présente les critères d'information d'Akaike (AIC) et bayésien (BIC) et la valeur du log-vraisemblance (*log-likelihood*; log-lik) des modèles ayant une à huit classes estimées avec poLCA et StepMix. Le modèle à huit classes ayant un nombre de paramètres plus élevé que le nombre d'observations (surparamétrisation du modèle), celui-ci n'est pas considéré dans l'analyse comparative. Les indices d'ajustements obtenus avec les deux librairies sont très similaires.
+
+Quant au choix du modèle, il semble y avoir conflit entre les indices d'ajustement AIC et BIC : AIC indique que le modèle à sept classes est le modèle qui s'ajuste le mieux aux données alors que le modèle à six classes est choisi par le BIC. Cette situation est fréquente, car le BIC pénalise les modèles avec un nombre plus élevé de paramètres, dont le nombre de catégories de la variable latente (c.-à-d. classes latentes). Le BIC est ainsi généralement plus robuste au surajustement que l'indice AIC. En se fiant aussi à l'évaluation visuelle des graphiques des modèles de mesure, la solution à six classes semblait également mieux s'ajuster aux données, tout en correspondant mieux aux objectifs de recherche, soit de distinguer des sous-groupes théoriquement pertinents.
+
+<br>
+
+```{r, include=FALSE}
+#Téléchargement des librairies nécessaires
+library(RCurl)
+library(readr)
+library(ggplot2)
+library(poLCA)
+library(haven)
+library(dplyr)
+library(TraMineR)
+library(TraMineRextras)
+library(descr)
+library(flexclust)
+library(nnet)
+library(glmnet)
+library(lmtest)
+library(WeightedCluster)
+library(fpc)
+library(descr)
+library(fossil)
+library(stepmixr)
+library(reticulate)
+library(gt)
+
+#Pour s'assurer de la reproductibilité des analyses
+set.seed(123) 
+
+#Téléchargement de la base de données initiale et étiquetage des données
+df <- read.csv(text=getURL("https://raw.githubusercontent.com/Labo-Lacourse/RMLCA-with-StepMix/main/Data/measurementdf.csv"))
+
+#Étiquettes des catégories
+labels <- c("NEET", "Emploi","Education secondaire","Education postsecondaire")
+shortlabels <- c("N", "T", "ES", "EP")
+
+####Analyse LCA 16 mois
+##Création d'une nouvelle base de données où l'on garde 1/3 des 48 temps de mesure
+
+#poLCA : 1= NEET, 2=emploi, 3=éducation secondaire, 4 = éducation post-secondaire
+df16m <- df[c(1,4,7,10,13,16,19,22,25,28,31,34,37,40,43,46)]
+#StepMix : 0= NEET, 1=emploi, 2=éducation secondaire, 3 = éducation post-secondaire
+dfstepmix <- df[c(1,4,7,10,13,16,19,22,25,28,31,34,37,40,43,46)] - as.integer(1)
+
+
+#Formule poLCA : ACL-MR simple
+f16 <- cbind(M1r, M4r, M7r, M10r, M13r, M16r, M19r, M22r, M25r, M28r, M31r, M34r, M37r, M40r, M43r, M46r)~1
+
+#Estimation de 1 classe [référence] à 8 classes
+#Note : Les modèles sont tous lancés avec nrep=1000 (StepMix : n_init = 1000), pour des questions de cohérences et pour faciliter la comparaison des estimations réalisées avec StepMix et poLCA. Toutefois, il est à noter qu'en raison de la complexité des modèles présentés, certains modèles réalisés avec StepMix et poLCA peuvent avoir convergé sur un "maximum global". En contexte de recherche, les critères de convergence, le nombre d'itérations (poLCA : maxiter; StepMix max_iter), le nombre de répétions (poLCA : nrep ; StepMix : n_init) et les autres paramètres pouvant affecter la convergence des modèles devraient être ajustés avec soin.
+
+poLCA1 <- poLCA(f16, df16m, nclass = 1, na.rm=FALSE, nrep = 1000) 
+poLCA2 <- poLCA(f16, df16m, nclass = 2, na.rm=FALSE, nrep = 1000)
+poLCA3 <- poLCA(f16, df16m, nclass = 3, na.rm=FALSE, nrep = 1000)
+poLCA4 <- poLCA(f16, df16m, nclass = 4, na.rm=FALSE, nrep = 1000)
+poLCA5 <- poLCA(f16, df16m, nclass = 5, na.rm=FALSE, nrep = 1000)
+poLCA6 <- poLCA(f16, df16m, nclass = 6, na.rm=FALSE, nrep = 1000)
+poLCA7 <- poLCA(f16, df16m, nclass = 7, na.rm=FALSE, nrep = 1000)
+poLCA8 <- poLCA(f16, df16m, nclass = 8, na.rm=FALSE, nrep = 1000)
+```
+
+```{r, include=FALSE}
+#Indices d'ajustement (maximum log-likelihood, BIC et AIC)
+poLCA_llik <- NULL
+poLCA_llik[1] <- poLCA1$llik
+poLCA_llik[2] <- poLCA2$llik
+poLCA_llik[3] <- poLCA3$llik
+poLCA_llik[4] <- poLCA4$llik
+poLCA_llik[5] <- poLCA5$llik
+poLCA_llik[6] <- poLCA6$llik
+poLCA_llik[7] <- poLCA7$llik
+poLCA_llik[8] <- poLCA8$llik
+
+poLCA_BIC <- NULL
+poLCA_BIC[1] <- poLCA1$bic
+poLCA_BIC[2] <- poLCA2$bic
+poLCA_BIC[3] <- poLCA3$bic
+poLCA_BIC[4] <- poLCA4$bic
+poLCA_BIC[5] <- poLCA5$bic
+poLCA_BIC[6] <- poLCA6$bic
+poLCA_BIC[7] <- poLCA7$bic
+poLCA_BIC[8] <- poLCA8$bic
+
+poLCA_AIC <- NULL
+poLCA_AIC[1] <- poLCA1$aic
+poLCA_AIC[2] <- poLCA2$aic
+poLCA_AIC[3] <- poLCA3$aic
+poLCA_AIC[4] <- poLCA4$aic
+poLCA_AIC[5] <- poLCA5$aic
+poLCA_AIC[6] <- poLCA6$aic
+poLCA_AIC[7] <- poLCA7$aic
+poLCA_AIC[8] <- poLCA8$aic
+```
+
+```{r, include=FALSE}
+#Créer de nouvelles variables identifiant chaque cas à sa classe
+df16mpoLCA <- df16m
+df16mpoLCA$class6 <- poLCA6$predclass
+```
+
+```{r, include=FALSE, fig.height=10}
+#Création des données en séquence, couleurs et graphique
+
+
+df16mpoLCA_seq <- seqdef(df16mpoLCA[1:16], xtstep = 4, labels=labels, states=shortlabels)
+cpal(df16mpoLCA_seq)<- c("blue", "red", "green", "purple")
+
+#Pour identifier les classes et les réordonner en fonction de la théorie
+seqdplot(df16mpoLCA_seq, group=df16mpoLCA$class6, border = NA, axes = FALSE) 
+freq(df16mpoLCA$class6, plot=F)
+```
+
+```{r, echo=FALSE, fig.height=10}
+#Réordonner les classes
+# Attention : L'ordre des classes du modèle à 6 classes estimé avec poLCA peut changer. 
+df16mpoLCA$class6r[df16mpoLCA$class6==1] <- 2
+df16mpoLCA$class6r[df16mpoLCA$class6==2] <- 3
+df16mpoLCA$class6r[df16mpoLCA$class6==3] <- 4
+df16mpoLCA$class6r[df16mpoLCA$class6==4] <- 5
+df16mpoLCA$class6r[df16mpoLCA$class6==5] <- 6
+df16mpoLCA$class6r[df16mpoLCA$class6==6] <- 1
+```
+
+```{r, include=FALSE}
+################### STEPMIX RM-LCA SIMPLE ########################
+#Estimation du modèle:
+StepMix1 = stepmix(n_components=1, 
+                        measurement='categorical',
+                        verbose=0,
+                        random_state=123,
+                        n_init=1000)
+
+StepMix2 = stepmix(n_components=2, 
+                         measurement='categorical',
+                         verbose=0,
+                         random_state=123,
+                         n_init=1000)
+
+StepMix3 = stepmix(n_components=3, 
+                         measurement='categorical',
+                         verbose=0,
+                         random_state=123,
+                         n_init=1000)
+
+StepMix4 = stepmix(n_components=4, 
+                         measurement='categorical',
+                         verbose=0,
+                         random_state=123,
+                         n_init=1000)
+
+StepMix5 = stepmix(n_components=5, 
+                         measurement='categorical',
+                         verbose=0,
+                         random_state=123,
+                         n_init=1000)
+
+StepMix6 = stepmix(n_components=6, 
+                         measurement='categorical',
+                         verbose=0,
+                         random_state=123,
+                         n_init=1000)
+
+StepMix7 = stepmix(n_components=7, 
+                         measurement='categorical',
+                         verbose=0,
+                         random_state=123,
+                         n_init=1000)
+
+StepMix8 = stepmix(n_components=8, 
+                         measurement='categorical',
+                         verbose=0,
+                         random_state=123,
+                         n_init=1000) 
+
+StepMix1FIT <- fit(StepMix1, dfstepmix)
+StepMix2FIT <- fit(StepMix2, dfstepmix)
+StepMix3FIT <- fit(StepMix3, dfstepmix)
+StepMix4FIT <- fit(StepMix4, dfstepmix)
+StepMix5FIT <- fit(StepMix5, dfstepmix)
+StepMix6FIT <- fit(StepMix6, dfstepmix)
+StepMix7FIT <- fit(StepMix7, dfstepmix)
+StepMix8FIT <- fit(StepMix8, dfstepmix)
+```
+
+```{r, echo=FALSE}
+#Indices d'ajustement (maximum log-likelihood, BIC et AIC)
+Stepmix_llik <- NULL
+Stepmix_llik[1] <- -7419.31
+Stepmix_llik[2] <- -6292.02
+Stepmix_llik[3] <- -5763.09
+Stepmix_llik[4] <- -5401.18
+Stepmix_llik[5] <- -5215.24
+Stepmix_llik[6] <- -5031.33
+Stepmix_llik[7] <- -4907.23
+Stepmix_llik[8] <- -4810.79
+
+Stepmix_BIC <- NULL
+Stepmix_BIC[1] <- StepMix1FIT$bic(dfstepmix)
+Stepmix_BIC[2] <- StepMix2FIT$bic(dfstepmix)
+Stepmix_BIC[3] <- StepMix3FIT$bic(dfstepmix)
+Stepmix_BIC[4] <- StepMix4FIT$bic(dfstepmix)
+Stepmix_BIC[5] <- StepMix5FIT$bic(dfstepmix)
+Stepmix_BIC[6] <- StepMix6FIT$bic(dfstepmix)
+Stepmix_BIC[7] <- StepMix7FIT$bic(dfstepmix)
+Stepmix_BIC[8] <- StepMix8FIT$bic(dfstepmix)
+
+Stepmix_AIC <- NULL
+Stepmix_AIC[1] <- StepMix1FIT$aic(dfstepmix)
+Stepmix_AIC[2] <- StepMix2FIT$aic(dfstepmix)
+Stepmix_AIC[3] <- StepMix3FIT$aic(dfstepmix)
+Stepmix_AIC[4] <- StepMix4FIT$aic(dfstepmix)
+Stepmix_AIC[5] <- StepMix5FIT$aic(dfstepmix)
+Stepmix_AIC[6] <- StepMix6FIT$aic(dfstepmix)
+Stepmix_AIC[7] <- StepMix7FIT$aic(dfstepmix)
+Stepmix_AIC[8] <- StepMix8FIT$aic(dfstepmix)
+```
+
+#### Tableau 1 : Statistiques d'ajustement des modèles ACL-MR obtenus avec poLCA et StepMix.
+
+```{r, echo=FALSE}
+model_N_Classes <- c(1,2,3,4,5,6,7,8)
+Table1_data_rbind1<- cbind(poLCA_AIC, poLCA_BIC, poLCA_llik, Stepmix_AIC, Stepmix_BIC, Stepmix_llik)
+Table1_data_rbind2 <- round(Table1_data_rbind1, 2)
+Table1_data_rbind2 <- cbind(model_N_Classes, Table1_data_rbind2)
+Table1_data_df1 <- as.data.frame(Table1_data_rbind2)
+
+Table1_data_df1 %>%
+  gt(rowname_col = "model_N_Classes")|>
+  tab_stubhead(label = "Nombre de classes latentes") |>
+  tab_header(
+    title = "Indices d'ajustement des modèles selon le nombre de classes latentes", 
+    subtitle = "Comparaison des modèles estimés dans poLCA et StepMix" ) |>
+  tab_spanner(
+    label = "poLCA",
+    columns = c(poLCA_AIC,	poLCA_BIC,	poLCA_llik)
+  ) |>
+  tab_spanner(
+    label = "StepMix",
+    columns = c(Stepmix_AIC,	Stepmix_BIC,	Stepmix_llik)
+  ) |>
+  cols_label(
+    poLCA_AIC = "AIC",
+    poLCA_BIC = "BIC",
+    poLCA_llik = "Llik",
+    Stepmix_AIC = "AIC",
+    Stepmix_BIC = "BIC",
+    Stepmix_llik = "Llik"
+    ) |>
+  tab_footnote(
+    footnote = "Llik: Log-likelihood"
+    )
+
+```
+
+<br>
+
+En inspectant visuellement les graphiques de séquences (Graphiques 1 et 2), les deux librairies présentent 6 classes pouvant être interprétées de façon identique : 1) la première classe est constituée de jeunes ayant de plus fortes probabilités de transiter de façon précoce du secondaire au travail; 2) la deuxième classe représente une transition du secondaire au travail de façon ni précoce ni tardive; 3) la troisième est caractérisée par une transition tardive du secondaire au travail; 4) la quatrième est caractérisée par une transition précoce du secondaire aux études postsecondaires; 5) la cinquième représente une transition ni précoce ni tardive du secondaire aux études postsecondaires; 6) la sixième est constituée de jeunes ayant de plus fortes chances d'être ni au travail ni aux études.
+
+<br>
+
+#### Graphique 1 : Modèle de mesure estimé avec poLCA (probabilités conditionnelles)
+
+```{r, echo=FALSE, fig.height=10, message=FALSE, warning=FALSE}
+polca_class_fac <-as.factor(df16mpoLCA$class6r)
+levels(polca_class_fac) <- c("Classe 1", "Classe 2", "Classe 3", "Classe 4", "Classe 5", "Classe 6")
+seqdplot(df16mpoLCA_seq, group=group.p(polca_class_fac), border = NA, axes = FALSE)
+```
+
+<br>
+
+#### Graphique 2 : Modèle de mesure estimé avec StepMixR (probabilités conditionnelles)
+
+```{r, include=FALSE, fig.height=10}
+#Créer une nouvelle variable identifiant chaque cas à sa classe
+dfstepmix$class6 <- predict(StepMix6FIT, X = dfstepmix)
+
+#Création des données en séquence et couleurs
+dfstepmix_seq <- seqdef(dfstepmix[1:16], xtstep = 4, labels=labels, states=shortlabels)
+cpal(dfstepmix_seq)<- c("blue", "red", "green", "purple")
+seqdplot(dfstepmix_seq, group=dfstepmix$class6, border = NA, axes = FALSE)
+```
+
+```{r, echo=FALSE, fig.height=10, message=FALSE, warning=FALSE}
+#Réordonner les classes
+dfstepmix$class6r <- NA
+dfstepmix$class6r[dfstepmix$class6==2] <- 1
+dfstepmix$class6r[dfstepmix$class6==4] <- 2
+dfstepmix$class6r[dfstepmix$class6==3] <- 3
+dfstepmix$class6r[dfstepmix$class6==0] <- 4
+dfstepmix$class6r[dfstepmix$class6==1] <- 5
+dfstepmix$class6r[dfstepmix$class6==5] <- 6
+
+#Graphique 2
+stepmix_class_fac <-as.factor(dfstepmix$class6r)
+levels(stepmix_class_fac) <- c("Classe 1", "Classe 2", "Classe 3", "Classe 4", "Classe 5", "Classe 6")
+seqdplot(df16mpoLCA_seq, group=group.p(stepmix_class_fac), border = NA, axes = FALSE)
+```
+
+<br>
+
+La légère différence entre le modèle estimé par poLCA et celui estimé par StepMix se reflète un peu plus sur la prévalence de classes (c.-à-d. proportions des groupes dans la population). L'écart de prévalences est le plus important pour la classe caractérisée par une transition du secondaire au travail de façon ni précoce ni tardive (classe 2), où StepMix a estimé que la prévalence de cette classe (22,5 %; n=87) est environ 1,8 point de pourcentage plus élevé que celle estimée par poLCA (20,7 %; n=80)$^a$. Statistiquement, il est possible de mesurer la similarité des deux classifications à l'aide de l'indice de Rand ajusté (*Adjusted Rand Index*; ARI), qui indique la proportion de cas qui se chevauchent dans la classification produite par deux modèles (Rand, 1971; Santos et Embrechts, 2009). Plus l'indice se rapproche de 1, plus les classifications sont similaires. Dans notre cas, l'ARI est de 0,91$^a$, ce qui signifie qu'environ 91% des cas sont classés de la même manière dans les deux modèles.
+
+$^a$Comme le modèle ne converge pas toujours exactement au même endroit avec poLCA, il est possible que vous obteniez des résultats légèrement différents. Les résultats de StepMix seront toujours identique.
+
+```{r, echo=FALSE}
+#Comparaison de l'ACL-MR simple estimé avec poLCA et celui estimé avec StepMix
+print("Indice de Rand")
+fossil::rand.index(dfstepmix$class6r, df16mpoLCA$class6r)
+print("Indice de Rand ajusté") 
+fossil::adj.rand.index(dfstepmix$class6r, df16mpoLCA$class6r)
+```
+
+
+<br>
+
+### ACL-MR avec prédicteur
+
+Comme mentionné dans l'introduction, une fois le modèle de mesure estimé, on cherche généralement à utiliser les classes latentes obtenues comme une variable observée dans un modèle structurel. Ici, nous cherchons à prédire l'appartenance aux classes à l'aide d'un prédicteur, soit l'appartenance à une minorité ethnique.
+
+Contrairement à StepMix, poLCA ne permet pas d'intégrer le prédicteur directement sans risquer de distordre le modèle de mesure (approche en une étape). On utilise donc la variable catégorielle (6 catégories) représentant l'appartenance aux classes latentes extraites du modèle estimé. La librairie *nnet* a ensuite été utilisée pour réaliser une régression logistique multinomiale. Le Tableau 2 présente les résultats de la régression logistique multinomiale, avec les jeunes vivant une transition précoce du secondaire au travail comme catégorie de référence. Les résultats indiquent que les jeunes qui sont issus de groupes minoritaires ont significativement plus de chances que les jeunes qui ne sont pas issus de groupes minoritaires d'appartenir à la classe caractérisée par une transition tardive du secondaire à l'emploi plutôt que d'appartenir à la classe caractérisée par une transition précoce du secondaire à l'emploi (*B*=1,11, z=3,02, p\<0,05). Il s'agit d'ailleurs d'une forte relation, car le rapport de cotes est de 3,03, indiquant que les jeunes issus de groupes minoritaires ont trois fois plus de chances de vivre une transition tardive vers l'emploi. La régression logistique ne montre aucune autre relation significative (p\>0,05).
+
+<br>
+
+```{r, include=FALSE}
+####################### poLCA RM-LCA avec covariable (3-step naif) ########################
+##Régression multinomiale avec minority comme prédicteur/covariable
+df.pred <- read.csv(text=getURL("https://raw.githubusercontent.com/Labo-Lacourse/RMLCA-with-StepMix/main/Data/structuraldf.csv"))
+df.pred$poLCA6 <- df16mpoLCA$class6r
+
+#Factorisation des variables
+df.pred$f.poLCA6 <- factor(df.pred$poLCA6)
+df.pred$f.minority <- factor(df.pred$minority)
+
+#Régression multinomiale
+predpoLCA6 <- multinom(f.poLCA6 ~ f.minority, data= df.pred)
+
+#Scores z et p-values
+z6 <- summary(predpoLCA6)$coefficients/summary(predpoLCA6)$standard.errors
+pv6 <- (1 - pnorm(abs(z6), 0, 1)) * 2
+```
+
+```{r, include=FALSE}
+#Tableau 2: 
+predpoLCA6_sum <- summary(predpoLCA6) 
+
+predpoLCA6_sum_intercept <- predpoLCA6_sum$coefficients[,1] # Intercept (classe 2, classe 3, etc.)
+predpoLCA6_sum_coef <- predpoLCA6_sum$coefficients[,2] # Coefficients BETA (classe 2, classe 3, etc.)
+predpoLCA6_sum_interceptSE <- predpoLCA6_sum$standard.errors[,1] # SE intercept (classe 2, classe 3, etc.)
+predpoLCA6_sum_coefSE <- predpoLCA6_sum$standard.errors[,2] # SE coefficients BETA (classe 2, classe 3, etc.)
+
+Zintercept <- z6[,1]
+Zcoef <- z6[,2]
+pValue_intercept <- pv6[,1]
+pValue_coef <- pv6[,2]
+
+class_label <- c( 
+  "Intercept", "Minorité", 
+  "Intercept", "Minorité", 
+  "Intercept", "Minorité", 
+  "Intercept", "Minorité", 
+  "Intercept", "Minorité")
+
+classe2 <- cbind(predpoLCA6_sum_intercept[1], predpoLCA6_sum_interceptSE[1], Zintercept[1], pValue_intercept[1])
+classe2_min <- cbind(predpoLCA6_sum_coef[1], predpoLCA6_sum_coefSE[1], Zcoef[1], pValue_coef[1])
+
+classe3 <- cbind(predpoLCA6_sum_intercept[2], predpoLCA6_sum_interceptSE[2], Zintercept[2], pValue_intercept[2])
+classe3_min <- cbind(predpoLCA6_sum_coef[2], predpoLCA6_sum_coefSE[2], Zcoef[2], pValue_coef[2])
+
+classe4 <- cbind(predpoLCA6_sum_intercept[3], predpoLCA6_sum_interceptSE[3], Zintercept[3], pValue_intercept[3])
+classe4_min <- cbind(predpoLCA6_sum_coef[3], predpoLCA6_sum_coefSE[3], Zcoef[3], pValue_coef[3])
+
+classe5 <- cbind(predpoLCA6_sum_intercept[4], predpoLCA6_sum_interceptSE[4], Zintercept[4], pValue_intercept[4])
+classe5_min <- cbind(predpoLCA6_sum_coef[4], predpoLCA6_sum_coefSE[4], Zcoef[4], pValue_coef[4])
+
+classe6 <- cbind(predpoLCA6_sum_intercept[5], predpoLCA6_sum_interceptSE[5], Zintercept[5], pValue_intercept[5])
+classe6_min <- cbind(predpoLCA6_sum_coef[5], predpoLCA6_sum_coefSE[5], Zcoef[5], pValue_coef[5])
+
+table2_class_data <- rbind(classe2, classe2_min, 
+                             classe3, classe3_min, 
+                             classe4, classe4_min, 
+                             classe5, classe5_min, 
+                             classe6, classe6_min)
+
+table2_class_data_round <- round(table2_class_data, 3)
+
+table2_data_df <- as.data.frame(table2_class_data_round)
+
+table2_data_df$coef_label <- class_label
+table2_data_df$EST <- table2_data_df$V1 
+table2_data_df$SE <- table2_data_df$V2
+table2_data_df$Z_values <- table2_data_df$V3 
+table2_data_df$p_values <- table2_data_df$V4 
+
+table2_data_df2 <- table2_data_df[c(5:9)]
+```
+
+#### Tableau 2 : Régression logistique multinomiale avec poLCA (approche naïve en 3 étapes)
+
+```{r, echo=FALSE}
+table2_data_df2 %>%
+  gt(rowname_col = "coef_label")|>
+  cols_label(
+    EST = "Coeff. (B)",
+    SE = "SE",
+    Z_values = "Z",
+    p_values = "Sig. (p-value)"
+    ) |>
+tab_row_group(
+    label = "Classe 6",
+    rows = c(9:10)
+  )|>
+tab_row_group(
+    label = "Classe 5",
+    rows = c(7:8)
+  ) |>
+tab_row_group(
+    label = "Classe 4",
+    rows = c(5:6)
+  ) |>
+tab_row_group(
+    label = "Classe 3",
+    rows = c(3:4)
+  )  |>
+tab_row_group(
+    label = "Classe 2",
+    rows = c(1:2)
+  ) 
+```
+
+```{r, echo=FALSE}
+print("Rapport de cotes")
+exp(predpoLCA6_sum_coef[[2]])
+```
+
+```{r, include=FALSE}
+# Données pour les modèles structurels réalisés avec StepMix
+#Données pour ALC-MR
+dfstepmix2 <- dfstepmix[c(1:16)] 
+
+#Variable minority
+
+dfstepmix_pred <- read.csv(text=getURL("https://raw.githubusercontent.com/Labo-Lacourse/RMLCA-with-StepMix/main/Data/structuraldf.csv"))
+minority <- dfstepmix_pred$minority
+```
+
+```{r, include=FALSE}
+#Coefficients obtenus avec StepMix selon l'approche utilisée
+#Résultats avec les différentes approches par étapes
+
+# Modèle 3-step naif
+stepmix_covModel = stepmix(n_components=6, 
+                           measurement='categorical',
+                           structural = 'covariate',
+                           verbose=0,
+                           n_steps=3,
+                           random_state=123,
+                           n_init=1000)
+
+# Modèle 3-step naif
+stepmix_covModel_3_step_BCH = stepmix(n_components=6, 
+                           measurement='categorical',
+                           structural = 'covariate',
+                           verbose=0,
+                           n_steps=3, correction = "BCH",
+                           random_state=123,
+                           n_init=1000)
+
+# Modèle 3-step ML
+stepmix_covModel_3_step_ML = stepmix(n_components=6, 
+                                      measurement='categorical',
+                                      structural = 'covariate',
+                                      verbose=0,
+                                      n_steps=3, correction = "ML",
+                                      random_state=123,
+                                      n_init=1000)
+
+# Modèle 2-step
+stepmix_covModel_2step = stepmix(n_components=6, 
+                                 measurement='categorical',
+                                 structural = 'covariate',
+                                 verbose=0,
+                                 n_steps=2,
+                                 random_state=123,
+                                 n_init=1000)
+
+#fit 3-step naif
+stepmix_covModelfit <- fit(stepmix_covModel, dfstepmix2, minority)
+#fit 3-step BCH
+stepmix_covModel_3_step_BCHfit <- fit(stepmix_covModel_3_step_BCH, dfstepmix2, minority)
+#fit 3-step ML
+stepmix_covModel_3_step_MLfit <- fit(stepmix_covModel_3_step_ML, dfstepmix2, minority)
+#fit 2-step
+stepmix_covModel_2stepfit <- fit(stepmix_covModel_2step, dfstepmix2, minority)
+```
+
+```{r, echo=FALSE}
+#Sortir les betas avec une catégorie de référence (3ème classe)
+BETA = stepmix_covModelfit$get_parameters()[['structural']][['beta']]
+BETA = BETA - c(1, 1, 1, 1, 1, 1) %o% BETA[3,]
+
+BETA_3_step_BCH = stepmix_covModel_3_step_BCHfit$get_parameters()[['structural']][['beta']]
+BETA_3_step_BCH = BETA_3_step_BCH - c(1, 1, 1, 1, 1, 1) %o% BETA_3_step_BCH[3,]
+
+BETA_3_step_ML = stepmix_covModel_3_step_MLfit$get_parameters()[['structural']][['beta']]
+BETA_3_step_ML = BETA_3_step_ML - c(1, 1, 1, 1, 1, 1) %o% BETA_3_step_ML[3,]
+
+BETA_2step = stepmix_covModel_2stepfit$get_parameters()[['structural']][['beta']]
+BETA_2step = BETA_2step - c(1, 1, 1, 1, 1, 1) %o% BETA_2step[3,]
+
+#Approche naîve en 3 étapes
+df_coefnaive <- as.data.frame(BETA)
+#Approche naîve en 2 étapes
+df_coef2 <- as.data.frame(BETA_2step)
+#Approche 3 étapes BCH
+df_coefBCH <- as.data.frame(BETA_3_step_BCH)
+#Approche 3 étapes ML
+df_coefML <- as.data.frame(BETA_3_step_ML)
+
+#Création d'une base de données ayant les coefficients de chaque approche
+df_coef_merge <- as.data.frame(BETA)
+df_coef_merge$incerceptNaive <- df_coefnaive$V1
+df_coef_merge$coefNaive <- df_coefnaive$V2
+
+df_coef_merge$intercept2 <- df_coef2$V1
+df_coef_merge$coef2 <- df_coef2$V2
+
+df_coef_merge$interceptBCH <- df_coefBCH$V1
+df_coef_merge$coefBCH <- df_coefBCH$V2
+
+df_coef_merge$interceptML <- df_coefML$V1
+df_coef_merge$coefML <- df_coefML$V2
+StepMix_coef_df <- df_coef_merge[c(3:10)]
+StepMix_coef_df_rounded <- round(StepMix_coef_df, 3)
+```
+
+Cependant, l'interprétation précédente est biaisée par l'utilisation d'une approche en 3 étapes dite « naïve », dans laquelle nous avons : 1) produit le modèle ACL-MR simple ; 2) assigné les individus à la classe à laquelle ils avaient la plus forte probabilité d'appartenance (c.-à-d. créer une variable à six catégories) ; 3) modélisé la relation entre la nouvelle variable créée et le prédicteur. Or, les modèles de mélange étant probabilistes, les individus peuvent avoir plusieurs probabilités non nulles d'appartenir à l'une ou l'autre des classes. Par exemple, le 11e répondant a une probabilité postérieure d'environ 0,25 d'appartenir à la première classe et une probabilité postérieure d'environ 0,75 d'appartenir à la classe caractérisée par de plus fortes probabilités d'être ni au travail ni aux études. Ainsi, en créant une nouvelle variable (étape 2), nous n'avons pas tenu compte de l'incertitude d'assignation aux classes et avons forcé les répondants à avoir une probabilité de 1,00 d'appartenir à l'une ou l'autre des six classes (assignation modale).
+
+Pour pallier ce biais, diverses approches ont été développées par des statisticiens et rendues majoritairement disponibles dans les logiciels commerciaux comme Mplus et Latent GOLD. StepMix est la première librairie disponible en libre accès permettant d'avoir recours à ces différentes méthodes de correction de biais dites par étapes. Le Tableau 3 présente les coefficients de régression multinomiale obtenus avec une approche naïve en 3 étapes et avec 3 méthodes différentes par étapes robustes, présentement disponibles dans StepMix. Nous vous invitons à consulter les articles publiés par les chercheurs ayant originellement développés les différentes méthodes par étapes pour plus d'informations sur l'utilité et le fonctionnement de ces approches (Bakk et Kuha, 2018; Bandeen-Roche et al., 1997; Bolck et al., 2004; Vermunt, 2010). Cette vaste littérature permettra d'orienter les chercheurs intéressés dans l'adoption de l'approche la plus convenable selon le contexte d'étude (taille de l'échantillon, données manquantes, nombre de paramètres, etc.). Brièvement, la variation des coefficients dans l'exemple ci-présent suggère que l'interprétation des résultats peut être affectée par la méthode choisie, d'où l'importance d'avoir facilement accès à ces différentes méthodes.
+
+<br>
+
+#### Tableau 3 : Coefficients de régression multinomiale obtenus avec StepMix selon la méthode en étape utilisée
+
+```{r, include=FALSE}
+#Ordonner les classes selon les prévalences
+prednaive <- predict(stepmix_covModelfit, X = dfstepmix2, Y=minority)
+predBCH <- predict(stepmix_covModel_3_step_BCHfit, X = dfstepmix2, Y=minority)
+predML <- predict(stepmix_covModel_3_step_MLfit , X = dfstepmix2, Y=minority)
+pred2step <- predict(stepmix_covModel_2stepfit, X = dfstepmix2, Y=minority)
+round(summary(as.factor(prednaive))/dim(dfstepmix2)[1], 4)  
+round(summary(as.factor(predBCH))/dim(dfstepmix2)[1], 4)  
+round(summary(as.factor(predML))/dim(dfstepmix2)[1], 4)  
+round(summary(as.factor(pred2step))/dim(dfstepmix2)[1], 4)
+
+
+##Tableau 3
+#la troisième classe (prévalence 0.2358%) est la catégorie de référence (prévalence 0.2358%)
+StepMixClasse2 <- cbind(StepMix_coef_df_rounded$incerceptNaive[5], 
+                        StepMix_coef_df_rounded$interceptBCH[5],
+                        StepMix_coef_df_rounded$interceptML[5],
+                        StepMix_coef_df_rounded$intercept2[5])
+
+StepMixClasse2_min <- cbind(StepMix_coef_df_rounded$coefNaive[5],
+                            StepMix_coef_df_rounded$coefBCH[5],
+                            StepMix_coef_df_rounded$coefML[5],
+                            StepMix_coef_df_rounded$coef2[5])
+
+StepMixClasse3 <- cbind(StepMix_coef_df_rounded$incerceptNaive[4], 
+                        StepMix_coef_df_rounded$interceptBCH[4],
+                        StepMix_coef_df_rounded$interceptML[4],
+                        StepMix_coef_df_rounded$intercept2[4])
+
+StepMixClasse3_min <- cbind(StepMix_coef_df_rounded$coefNaive[4],
+                            StepMix_coef_df_rounded$coefBCH[4],
+                            StepMix_coef_df_rounded$coefML[4],
+                            StepMix_coef_df_rounded$coef2[4])
+
+StepMixClasse4 <- cbind(StepMix_coef_df_rounded$incerceptNaive[1], 
+                        StepMix_coef_df_rounded$interceptBCH[1],
+                        StepMix_coef_df_rounded$interceptML[1],
+                        StepMix_coef_df_rounded$intercept2[1])
+
+StepMixClasse4_min <- cbind(StepMix_coef_df_rounded$coefNaive[1],
+                            StepMix_coef_df_rounded$coefBCH[1],
+                            StepMix_coef_df_rounded$coefML[1],
+                            StepMix_coef_df_rounded$coef2[1])
+
+StepMixClasse5 <- cbind(StepMix_coef_df_rounded$incerceptNaive[2], 
+                        StepMix_coef_df_rounded$interceptBCH[2],
+                        StepMix_coef_df_rounded$interceptML[2],
+                        StepMix_coef_df_rounded$intercept2[2])
+
+StepMixClasse5_min <- cbind(StepMix_coef_df_rounded$coefNaive[2],
+                            StepMix_coef_df_rounded$coefBCH[2],
+                            StepMix_coef_df_rounded$coefML[2],
+                            StepMix_coef_df_rounded$coef2[2])
+
+StepMixClasse6 <- cbind(StepMix_coef_df_rounded$incerceptNaive[6], 
+                        StepMix_coef_df_rounded$interceptBCH[6],
+                        StepMix_coef_df_rounded$coefML[6],
+                        StepMix_coef_df_rounded$intercept2[6])
+
+StepMixClasse6_min <- cbind(StepMix_coef_df_rounded$coefNaive[6],
+                            StepMix_coef_df_rounded$coefBCH[6],
+                            StepMix_coef_df_rounded$coefML[6],
+                            StepMix_coef_df_rounded$coef2[6])
+
+table3_df_bind <- rbind(StepMixClasse2,StepMixClasse2_min,
+                        StepMixClasse3,StepMixClasse3_min,
+                        StepMixClasse4,StepMixClasse4_min,
+                        StepMixClasse5,StepMixClasse5_min,
+                        StepMixClasse6,StepMixClasse6_min)
+
+table3_df_bind <- cbind(class_label, table3_df_bind)
+table3_df <- as.data.frame(table3_df_bind)
+
+```
+
+```{r, echo=FALSE}
+table3_df  %>%
+  gt(rowname_col = "class_label")|>
+     tab_stubhead(label = "Classes") |>
+cols_label(
+    V2 = "Naïve",
+    V3 = "BCH",
+    V4 = "ML",
+    V5 = "2-step"
+    ) |>
+  tab_spanner(
+    label = "Méthodes",
+    columns = c(V2, V3, V4, V5)
+  )|>
+  tab_header(
+    title = "Coefficients de régression obtenus à l'aide de différentes méthodes d'estimation par étapes corrigeant le biais "
+  ) |>
+tab_footnote(
+    footnote = "Naïve: Méthode en 3 étapes naïve / 
+                BCH: Méthode Bolck-Croon-Hagenaars / 
+                ML: Méthode corrigée par maximum de vraisemblance / 
+                2-step: Méthode en deux étapes")|>
+tab_row_group(
+    label = "Classe 6",
+    rows = c(9:10)
+  )|>
+tab_row_group(
+    label = "Classe 5",
+    rows = c(7:8)
+  ) |>
+tab_row_group(
+    label = "Classe 4",
+    rows = c(5:6)
+  ) |>
+tab_row_group(
+    label = "Classe 3",
+    rows = c(3:4)
+  )  |>
+tab_row_group(
+    label = "Classe 2",
+    rows = c(1:2)
+  ) 
+```
+
+<br>
+
+### Autres avantages de StepMix et futurs développements
+
+StepMix possède déjà de nombreux avantages qui la distinguent des autres librairies disponibles en libre accès. Par exemple, la librairie n'est pas dépendante de librairies tierces pour réaliser des modèles structurels. Dans l'exemple présenté ci-haut, le recours à la librairie *nnet* pour produire la régression logistique multinomiale entre le modèle ACL-MR de poLCA et la variable mesurant l'appartenance à un groupe ethnique minoritaire rend difficile et hasardeuse la comparaison des résultats du modèle avec l'approche « naïve » en 3 étapes obtenus avec poLCA et ceux obtenus avec StepMix. Un autre avantage similaire de StepMix est la possibilité de modéliser des groupes latents à partir de variables observées de plusieurs types de distributions, ce qui permet de réduire significativement le nombre de librairies utilisées et de faciliter l'apprentissage des chercheurs souhaitant utiliser ces modèles. Ainsi, StepMix permet présentement de réaliser des analyses de profils latents (LPA), sans avoir recours à d'autres logiciels ou librairies (p. ex., *mclust*). StepMix permet également de réaliser des modèles à partir de variables ayant différentes distributions, comme dans le cas où certaines variables seraient catégorielles et d'autres seraient de type intervalle/ratio et distribuées normalement. En pratique, cela évite de devoir introduire des variables factices, notamment dans le cas courant où des variables quantitatives sont transformées en variables catégorielles. Vous pouvez vous référer aux tutoriels présents sur la page GitHub de StepMix afin de découvrir ses nombreuses autres fonctionnalités (gestion de données manquantes, bootstrap, graphiques, etc.).
+
+StepMix est une librairie toujours en développement. Les méthodes qu'elle offre ont été conçues par un groupe de développeurs issus de l'intelligence artificielle et de la science des données. Dans le futur, nous développerons également des modules et indices plus adaptés aux besoins des chercheurs en sciences sociales. Par exemple, StepMix offre présentement un module de bootstrap non paramétrique permettant l'inférence par le biais d'intervalles de confiance, très utilisés en apprentissage automatique$^b$. Les *p-values* étant toujours très populaires en sciences sociales, elles seront intégrées dans une version future de la librairie afin de faciliter leur utilisation en contexte de recherche. Consultez les vignettes disponibles sur Cran et suivez la page GitHub pour rester au courant des développements futurs!
+
+$^b$ Pour l’instant, ce module est seulement disponible dans la version Python de StepMix, mais il sera prochainement disponible dans R.
+
+
+<br>
+
+### Références
+
+Asparouhov, T. et Muthén, B. (2019). Random Starting Values and Multistage Optimization. *Mplus*. <https://www.statmodel.com/download/StartsUpdate.pdf>
+
+Bakk, Z. et Kuha, J. (2018).Two-step estimation of models between latent classes and external variables. *Psychometrika*, **83**, 871-892. <https://doi.org/10.1007/s11336-017-9592-7>
+
+Bandeen-roche, K., Miglioretti, D. L., Zeger, S. L. et Rathouz, P. J. (1997). Latent variable regression for multiple discrete outcomes. *Journal of the American Statistical Association*, *92*(440), 1375-1386. <https://doi.org/10.1080/01621459.1997.10473658>
+
+Barban, N. et Billari, F. C. (2012). Classifying life course trajectories: A comparison of latent class and sequence analysis. *Journal of the Royal Statistical Society. Series C (Applied Statistics), 61*(5), 765-784.
+
+Bolck, A., Croon, M. et Hagenaars, J. (2004). Estimating latent structure models with categorical variables: One-step versus three-step estimators. *Political Analysis*, *12*, 3-27. <https://doi.org/10.1093/pan/mph001>
+
+Collins, L. M., Graham, J. W., Rousculp, S. S. et Hansen, W. B. (1997). Heavy caffeine use and the beginning of the substance use onset process: An illustration of latent transition analysis. Dans *The science of prevention: Methodological advances from alcohol and substance abuse research.* (p. 79-99). American Psychological Association. <https://doi.org/10.1037/10222-003>
+
+Collins, L. M. et Lanza, S. T. (2010). *Latent class and latent transition analysis : with applications in the social behavioral, and health sciences*. Wiley. <https://doi.org/10.1002/9780470567333>
+
+Dupéré, V., Dion, E., Leventhal, T., Archambault, I., Crosnoe, R. et Janosz, M. (2018). High school dropout in proximal context: The triggering role of stressful life events. *Child Development*, *89*(2), e107-e122. <https://doi.org/10.1111/cdev.12792>
+
+Hagenaars, J. A. et McCutcheon, A. L. (2002). *Applied latent class analysis*. Cambridge University Press.
+
+Han, Y., Liefbroer, A. C. et Elzinga, C. H. (2017). Comparing methods of classifying life courses: Sequence analysis and latent class analysis. *Longitudinal and Life Course Studies*, *8*(4) 319-341.<https://doi.org/10.14301/llcs.v8i4.409>
+
+Johnston, C. A., Crosnoe, R., Mernitz, S. E. et Pollitt, A. M. (2020). Two Methods for Studying the Developmental Significance of Family Structure Trajectories. *Journal of Marriage and Family*, *82*(3), 1110-1123.<https://doi.org/10.1111/jomf.12639>
+
+Killian, M. O., Cimino, A. N., Weller, B. E. et Hyun Seo, C. (2019, 2019/03/04). A Systematic Review of Latent Variable Mixture Modeling Research in Social Work Journals. *Journal of Evidence-Based Social Work, 16*(2), 192-210.<https://doi.org/10.1080/23761407.2019.1577783>
+
+Lanza, S. T. (2016). Latent Class Analysis for Developmental Research. *Child development perspectives, 10*(1), 59-64.<https://doi.org/10.1111/cdep.12163>
+
+Lanza, S. T., Bray, B. C. et Collins, L. M. (2012). *An introduction to latent class and latent transition analysis* (vol. 2).
+
+McLachlan, G. J. et Peel, D. (2000). *Finite mixture models*. J. Wiley.<http://catalogue.bnf.fr/ark:/12148/cb39038849q>
+
+Nylund-Gibson, K. et Choi, A. Y. (2018). Ten frequently asked questions about latent class analysis. *Translational Issues in Psychological Science*, *4*(4), 440-461.<https://doi.org/10.1037/tps0000176>
+
+Rand, W. M. (1971). Objective Criteria for the Evaluation of Clustering Methods. *Journal of the American Statistical Association*, *66*(336), 846-850. <https://doi.org/10.1080/01621459.1971.10482356>
+
+Santos, J. M. et Embrechts, M. (2009). On the Use of the Adjusted Rand Index as a Metric for Evaluating Supervised Classification. Dans C. Alippi, M. Polycarpou, C. Panayiotou et G. Ellinas (dir.), *Artificial Neural Networks -- ICANN 2009* (vol. 5769, p. 175-184). Springer Berlin Heidelberg. <https://doi.org/10.1007/978-3-642-04277-5_18>
+
+Thouin, É., Courdi, C., Olivier, E., Dupéré, V., Denault, A.-S. et Lacourse, É. (2022). Introduction à l’analyse de séquence et illustration de son application en sciences sociales à partir de patrons de transitions de l’école au travail. *Revue de psychoéducation*, 51(2), 427–449. <https://doi.org/10.7202/1093470ar>
+
+Thouin, É. (2022). *La transition de l'école au travail chez les jeunes en situation de vulnérabilité scolaire ou sociale : examen des déterminants, des conséquences et des processus explicatifs* [thèse de doctorat, Université de Montréal]. Papyrus. <https://bib.umontreal.ca/citer/styles-bibliographiques/apa?tab=5248896>
+
+Vermunt, J. K. (2010). Latent class modeling with covariates: Two improved three-step approaches. *Political Analysis*, *18*(4), 450-469. <https://doi.org/10.1093/pan/mpq025>
